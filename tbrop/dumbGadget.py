@@ -1,6 +1,6 @@
 from capstone import *
-from gadget import *
-from arch import SUPPORTED_ARCH
+from tbrop.gadget import *
+from tbrop.arch import SUPPORTED_ARCH
 
 X86_MAX_INST_LEN = 16
 

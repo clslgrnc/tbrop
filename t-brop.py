@@ -2,7 +2,7 @@ from IPython import embed
 import argparse
 
 import lief
-import dumbGadget
+from tbrop.dumbGadget import dumbGadget
 from capstone.x86_const import *
 
 
@@ -58,7 +58,7 @@ if __name__ == '__main__':
             break
 
 
-    gdgtCollection = dumbGadget.dumbGadget('x64', bytearray(sctext.content))
+    gdgtCollection = dumbGadget('x64', bytearray(sctext.content))
 
     callback = limitCost
     context = 64

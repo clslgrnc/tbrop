@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
-import dumbGadget
+from tbrop.dumbGadget import dumbGadget
 
 data = b""
 
@@ -52,7 +52,7 @@ data=b"\x48\xff\xc9\x48\xad\xc3"
 
 data=b"\x48\x89\xe3\x48\x89\x0b\x58\xc3"
 
-gdgtCollection = dumbGadget.dumbGadget('x64',data)
+gdgtCollection = dumbGadget('x64',data)
 
 
 gdgtCollection.dumbGadgets(max_cost=132)

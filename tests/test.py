@@ -2,8 +2,8 @@
 
 from capstone.x86_const import *
 
-import arch
-import gadget
+import tbrop.arch
+import tbrop.gadget
 
 archx64 = arch.Arch_x86_64()
 archx32 = arch.Arch_x86_32()

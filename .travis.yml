@@ -9,3 +9,5 @@ install:
 # command to run tests
 script:
   - python -m unittest tests/test_*.py
+
+cache: pip

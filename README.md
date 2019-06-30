@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/clslgrnc/tbrop.svg?branch=master)](https://travis-ci.com/clslgrnc/tbrop)
+
 PoC
 
 The Dockerfile can be used as a crude installation instruction.

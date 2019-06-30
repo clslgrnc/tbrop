@@ -10,37 +10,44 @@ from capstone.x86_const import *
 # at least 2 for separate mem/stack
 MEM_RESERVED_INDICES = 58
 
-STACK_PROP = 4 #stack proportions: 1/n over top, (n-1)/n under top
+STACK_PROP = 4  # stack proportions: 1/n over top, (n-1)/n under top
 
 
-STACK_MAX_DIFF = 0X8000 # if we look further than that, we are not in the stack anymore
+STACK_MAX_DIFF = 0x8000  # if we look further than that, we are not in the stack anymore
 
-class Arch():
+
+class Arch:
     def __init__(self, dependencies):
-        assert(MEM_RESERVED_INDICES > 6 + STACK_PROP)
-        
+        assert MEM_RESERVED_INDICES > 6 + STACK_PROP
+
         self.matrix = dependencies
         self.size, _ = dependencies.shape
-        
+
         self.deref = self.size - MEM_RESERVED_INDICES
-        
+
         self.memRead = self.deref + 1
         self.memWrite = self.memRead + 1
-        
+
         self.stackRead = self.size - 2
         self.stackWrite = self.size - 1
-        self.stackOverRead = self.memWrite + 1 
+        self.stackOverRead = self.memWrite + 1
         self.stackOverWrite = self.stackOverRead + 1
         self.stackSize = self.stackRead - self.stackOverWrite - 1
-        
-        self.stackTop = self.stackOverWrite + 1 + (self.stackSize//STACK_PROP)
-        
+
+        self.stackTop = self.stackOverWrite + 1 + (self.stackSize // STACK_PROP)
+
         self.stackFirst = self.stackOverWrite + 1
         self.stackLast = self.stackRead - 1
-        
-        assert(self.stackOverWrite < self.stackFirst < self.stackTop < self.stackLast < self.stackRead)
-        assert(self.stackFirst + self.stackSize == self.stackLast + 1)
-        
+
+        assert (
+            self.stackOverWrite
+            < self.stackFirst
+            < self.stackTop
+            < self.stackLast
+            < self.stackRead
+        )
+        assert self.stackFirst + self.stackSize == self.stackLast + 1
+
         self.stackREG = 0
         self.flagREG = 0
         self.opTypeINVALID = None
@@ -48,8 +55,8 @@ class Arch():
         self.opTypeIMM = None
         self.opTypeMEM = None
         self.opTypeFP = None
-        
-        self.addrSize = 8 #in bytes
+
+        self.addrSize = 8  # in bytes
 
         self.regDepDict = {}
 
@@ -65,7 +72,6 @@ class Arch():
             childrens.remove(id_)
             self.regDepDict[id_] = parents, childrens
             return parents, childrens
-
 
     # return index of stack cell at offset (in number of cells)
     def indexStackRead(self, offsetCell):
@@ -87,15 +93,14 @@ class Arch():
         else:
             return index
 
-
     def shiftStack(self, offsetByte):
         stackDispl = offsetByte // self.addrSize
-        reg_reset = set(range(self.stackFirst, self.stackLast+1))
+        reg_reset = set(range(self.stackFirst, self.stackLast + 1))
         flows = []
         flows.append(([self.stackREG], [self.stackREG]))
 
         for i in range(self.stackFirst, self.stackLast + 1):
-            
+
             srcs = [self.indexStackRead(i - self.stackTop + stackDispl)]
             if offsetByte % self.addrSize != 0:
                 srcs.append(self.indexStackRead(i - self.stackTop + stackDispl + 1))
@@ -106,21 +111,26 @@ class Arch():
                 dsts.append(self.indexStackWrite(i - self.stackTop - (stackDispl + 1)))
             flows.append((dsts, [i]))
 
-        if offsetByte > self.addrSize*self.stackSize:
+        if offsetByte > self.addrSize * self.stackSize:
             flows.append(([self.stackOverWrite], [self.stackRead]))
-        elif offsetByte < - self.addrSize*self.stackSize:
+        elif offsetByte < -self.addrSize * self.stackSize:
             flows.append(([self.stackWrite], [self.stackOverRead]))
 
-        flows.append(([self.deref],[self.stackREG]))
-        
+        flows.append(([self.deref], [self.stackREG]))
+
         return reg_reset, flows
-            
+
     def killStack(self, killer=[]):
-        reg_reset = set(range(self.stackFirst, self.stackLast+1))
-        reg_reset.update([self.stackOverRead, self.stackOverWrite, self.stackRead, self.stackWrite])
-        flows = [(list(reg_reset), [self.memRead]+killer), ([self.memWrite], list(reg_reset))]
+        reg_reset = set(range(self.stackFirst, self.stackLast + 1))
+        reg_reset.update(
+            [self.stackOverRead, self.stackOverWrite, self.stackRead, self.stackWrite]
+        )
+        flows = [
+            (list(reg_reset), [self.memRead] + killer),
+            ([self.memWrite], list(reg_reset)),
+        ]
         return reg_reset, flows
-        
+
     def corruptedStack(self, instW):
         if self.stackREG in instW:
             return True
@@ -129,7 +139,6 @@ class Arch():
             if reg in instW:
                 return True
         return False
-
 
     def getOperandIndices(self, op):
         opR = []
@@ -145,7 +154,7 @@ class Arch():
             if op_access & capstone.CS_AC_WRITE:
                 opW.append(op_reg)
         elif op_type == self.opTypeMEM:
-            #TODO: check if base (and/or index?) is RSP
+            # TODO: check if base (and/or index?) is RSP
 
             op_mem_base = op.mem.base
             op_mem_index = op.mem.index
@@ -154,18 +163,22 @@ class Arch():
             if op_mem_index != 0:
                 deref.append(op_mem_index)
 
-            #Are we in the stack?
+            # Are we in the stack?
             op_mem_disp = op.mem.disp
-            if op_mem_base == self.stackREG and op_mem_index == 0 and abs(op_mem_disp) < STACK_MAX_DIFF:
+            if (
+                op_mem_base == self.stackREG
+                and op_mem_index == 0
+                and abs(op_mem_disp) < STACK_MAX_DIFF
+            ):
                 stackDispl = op_mem_disp // self.addrSize
                 if op_access & capstone.CS_AC_READ or op_access == 0:
                     opR.append(self.indexStackRead(stackDispl))
                     if op_mem_disp % self.addrSize != 0:
-                        opR.append(self.indexStackRead(stackDispl+1))
+                        opR.append(self.indexStackRead(stackDispl + 1))
                 if op_access & capstone.CS_AC_WRITE:
-                    opW.append(self.indexStackWrite(stackDispl))                
+                    opW.append(self.indexStackWrite(stackDispl))
                     if op_mem_disp % self.addrSize != 0:
-                        opW.append(self.indexStackWrite(stackDispl+1))
+                        opW.append(self.indexStackWrite(stackDispl + 1))
             else:
                 if op_access & capstone.CS_AC_READ or op_access == 0:
                     opR.append(self.memRead)
@@ -174,15 +187,14 @@ class Arch():
                 if op_access & capstone.CS_AC_WRITE:
                     opW.append(self.memWrite)
         return opW, opR, deref
-            
-    
+
     def checkInstFlows(self, inst, reg_reset, flows):
         for index in reg_reset:
             if index < 0 or index >= self.size:
                 print(inst.mnemonic, inst.op_str)
                 raise IndexError
-        
-        for dst,src in flows:
+
+        for dst, src in flows:
             for index in dst:
                 if index < 0 or index >= self.size:
                     print(inst.mnemonic, inst.op_str)
@@ -193,11 +205,11 @@ class Arch():
                     raise IndexError
 
         return reg_reset, flows
-        
+
     def getInstFlows(self, inst):
         src, dst = inst.regs_access()
-#        if src == (): src = []
-#        if dst == (): dst = []
+        #        if src == (): src = []
+        #        if dst == (): dst = []
         reg_reset = set(dst)
         dst = set(dst)
         src = set(src)
@@ -219,17 +231,19 @@ class Arch():
             dst.update(opW)
             reg_reset.update(opW)
             allDeref.update(deref)
-            stackReset = set(opW).intersection(range(self.stackFirst, self.stackLast + 1))
-            #if a write span several stack cells, they should not be reseted
+            stackReset = set(opW).intersection(
+                range(self.stackFirst, self.stackLast + 1)
+            )
+            # if a write span several stack cells, they should not be reseted
             if len(stackReset) == 1:
                 reg_reset.update(stackReset)
-            #this is not a satisfying solution, we do not know here the size of the write!
+            # this is not a satisfying solution, we do not know here the size of the write!
         flows = [(dst, src), ([self.deref], allDeref)]
         if self.corruptedStack(dst):
             reg_resetStack, flowStack = self.killStack(list(src))
             reg_reset.update(reg_resetStack)
             flows = flows + flowStack
-#        return self.checkInstFlows(inst, reg_reset, flows)
+        #        return self.checkInstFlows(inst, reg_reset, flows)
         return reg_reset, flows
 
     def __str__(self):
@@ -239,20 +253,24 @@ class Arch():
         for i in range(self.size):
             _str += "%.3d" % i
             for j in range(self.size):
-                if (i,j) in self.matrix : _str += "x"
-                else : _str += "."
+                if (i, j) in self.matrix:
+                    _str += "x"
+                else:
+                    _str += "."
             _str += "\n"
 
 
 class Arch_x86_64(Arch):
     def __init__(self):
-        size = X86_REG_ENDING + MEM_RESERVED_INDICES # 1 reserved for mem dependencies 1 for bottom of stack, the rest for top of stack
-        dependencies = sparse.lil_matrix((size,size),dtype=np.bool)
-        
-        for i in range(size):
-            dependencies[i,i] = True
+        size = (
+            X86_REG_ENDING + MEM_RESERVED_INDICES
+        )  # 1 reserved for mem dependencies 1 for bottom of stack, the rest for top of stack
+        dependencies = sparse.lil_matrix((size, size), dtype=np.bool)
 
-        # RAX    
+        for i in range(size):
+            dependencies[i, i] = True
+
+        # RAX
         dependencies[X86_REG_RAX, X86_REG_EAX] = True
         dependencies[X86_REG_RAX, X86_REG_AX] = True
         dependencies[X86_REG_RAX, X86_REG_AH] = True
@@ -262,7 +280,7 @@ class Arch_x86_64(Arch):
         dependencies[X86_REG_EAX, X86_REG_AL] = True
         dependencies[X86_REG_AX, X86_REG_AH] = True
         dependencies[X86_REG_AX, X86_REG_AL] = True
-        # RBX    
+        # RBX
         dependencies[X86_REG_RBX, X86_REG_EBX] = True
         dependencies[X86_REG_RBX, X86_REG_BX] = True
         dependencies[X86_REG_RBX, X86_REG_BH] = True
@@ -272,7 +290,7 @@ class Arch_x86_64(Arch):
         dependencies[X86_REG_EBX, X86_REG_BL] = True
         dependencies[X86_REG_BX, X86_REG_BH] = True
         dependencies[X86_REG_BX, X86_REG_BL] = True
-        # RCX    
+        # RCX
         dependencies[X86_REG_RCX, X86_REG_ECX] = True
         dependencies[X86_REG_RCX, X86_REG_CX] = True
         dependencies[X86_REG_RCX, X86_REG_CH] = True
@@ -282,7 +300,7 @@ class Arch_x86_64(Arch):
         dependencies[X86_REG_ECX, X86_REG_CL] = True
         dependencies[X86_REG_CX, X86_REG_CH] = True
         dependencies[X86_REG_CX, X86_REG_CL] = True
-        # RDX    
+        # RDX
         dependencies[X86_REG_RDX, X86_REG_EDX] = True
         dependencies[X86_REG_RDX, X86_REG_DX] = True
         dependencies[X86_REG_RDX, X86_REG_DH] = True
@@ -384,13 +402,13 @@ class Arch_x86_64(Arch):
         matrix = dependencies.tocsr(True)
 
         Arch.__init__(self, matrix)
-        
+
         self.opTypeINVALID = X86_OP_INVALID
         self.opTypeREG = X86_OP_REG
         self.opTypeIMM = X86_OP_IMM
         self.opTypeMEM = X86_OP_MEM
         # self.opTypeFP = X86_OP_FP
-        
+
         self.stackREG = X86_REG_RSP
         self.flagREG = X86_REG_EFLAGS
 
@@ -401,88 +419,95 @@ class Arch_x86_64(Arch):
         # print "%s %s" % (inst.mnemonic, inst.op_str)
         if inst.mnemonic == "lea":
             src, dst = inst.regs_access()
-            if src == (): src = []
-            if dst == (): dst = []
-            return set(dst), [(dst,src)]
+            if src == ():
+                src = []
+            if dst == ():
+                dst = []
+            return set(dst), [(dst, src)]
 
         elif inst.mnemonic.startswith("pusha") or inst.mnemonic.startswith("popa"):
-            #raise Exception("TODO: deal with pusha/popa")
+            # raise Exception("TODO: deal with pusha/popa")
             return Arch.getInstFlows(self, inst)
-            
+
         elif inst.mnemonic.startswith("push") or capstone.CS_GRP_CALL in inst.groups:
-            reg_reset = set(range(self.stackFirst, self.stackLast+1))
-            flows = [([], []) for i in range(self.stackSize+3)]
+            reg_reset = set(range(self.stackFirst, self.stackLast + 1))
+            flows = [([], []) for i in range(self.stackSize + 3)]
 
             flows[0] = ([self.stackFirst], [self.stackOverRead])
-            for i in range(1, self.stackTop-self.stackFirst):
-                flows[i]=([self.stackFirst + i], [self.stackFirst + i - 1])
+            for i in range(1, self.stackTop - self.stackFirst):
+                flows[i] = ([self.stackFirst + i], [self.stackFirst + i - 1])
 
             if capstone.CS_GRP_CALL in inst.groups:
-                #TODO: should we ignore RIP dependencies? (because RIP is a constant at a given address...)
+                # TODO: should we ignore RIP dependencies? (because RIP is a constant at a given address...)
                 #            flowSTop = [self.stackTopIndex],[X86_REG_RIP]
-                #            reg_reset.add(X86_REG_RIP)                
+                #            reg_reset.add(X86_REG_RIP)
                 opW, opR, deref = self.getOperandIndices(inst.operands[0])
-                assert(opW == [])
+                assert opW == []
                 flowSTop = [self.stackTop], []
-                flows[self.stackSize+2] = [self.deref], deref+[self.stackREG]
+                flows[self.stackSize + 2] = [self.deref], deref + [self.stackREG]
             elif inst.mnemonic.startswith("pushf"):
-                flowSTop = [self.stackTop],[self.flagREG]
-                flows[self.stackSize+2] = [self.deref], [self.stackREG]
+                flowSTop = [self.stackTop], [self.flagREG]
+                flows[self.stackSize + 2] = [self.deref], [self.stackREG]
             else:
                 opW, opR, deref = self.getOperandIndices(inst.operands[0])
-                assert(opW == [])
-                flowSTop = ([self.stackTop] + opW), opR+deref
-                flows[self.stackSize+2] = [self.deref], deref+[self.stackREG]
-            flows[self.stackTop-self.stackFirst] = flowSTop
+                assert opW == []
+                flowSTop = ([self.stackTop] + opW), opR + deref
+                flows[self.stackSize + 2] = [self.deref], deref + [self.stackREG]
+            flows[self.stackTop - self.stackFirst] = flowSTop
 
-            for i in range(self.stackTop-self.stackFirst + 1, self.stackSize):
-                flows[i]=([self.stackFirst + i], [self.stackFirst + i - 1])
+            for i in range(self.stackTop - self.stackFirst + 1, self.stackSize):
+                flows[i] = ([self.stackFirst + i], [self.stackFirst + i - 1])
 
             flows[self.stackSize] = [self.stackWrite], [self.stackLast]
-                
-            flows[self.stackSize+1] = [self.stackREG, self.deref], [self.stackREG]
+
+            flows[self.stackSize + 1] = [self.stackREG, self.deref], [self.stackREG]
             reg_reset.add(self.stackREG)
 
             return reg_reset, flows
-            
+
         elif inst.mnemonic.startswith("popf") or inst.mnemonic == "pop":
-            reg_reset = set(range(self.stackFirst, self.stackLast+1))
-            flows = [([], []) for i in range(self.stackSize+3)]
+            reg_reset = set(range(self.stackFirst, self.stackLast + 1))
+            flows = [([], []) for i in range(self.stackSize + 3)]
 
             flows[0] = ([self.stackOverWrite], [self.stackFirst])
-            for i in range(1, self.stackTop-self.stackFirst):
-                flows[i]=([self.stackFirst + i - 1], [self.stackFirst + i])
+            for i in range(1, self.stackTop - self.stackFirst):
+                flows[i] = ([self.stackFirst + i - 1], [self.stackFirst + i])
 
             if inst.mnemonic.startswith("popf"):
                 opW = [self.flagREG]
                 deref = []
             else:
                 opW, opR, deref = self.getOperandIndices(inst.operands[0])
-                assert(opR == [])
+                assert opR == []
                 # We only consider deref as interesting flows on memory reads
             reg_reset.update(opW)
-            flows[self.stackSize+2] = [self.deref], deref+[self.stackREG]
-            flows[self.stackTop-self.stackFirst] = opW+[self.stackTop-1], [self.stackTop]
+            flows[self.stackSize + 2] = [self.deref], deref + [self.stackREG]
+            flows[self.stackTop - self.stackFirst] = (
+                opW + [self.stackTop - 1],
+                [self.stackTop],
+            )
 
-            for i in range(self.stackTop-self.stackFirst + 1, self.stackSize):
-                flows[i]=([self.stackFirst + i - 1], [self.stackFirst + i])
+            for i in range(self.stackTop - self.stackFirst + 1, self.stackSize):
+                flows[i] = ([self.stackFirst + i - 1], [self.stackFirst + i])
 
             flows[self.stackSize] = [self.stackLast], [self.stackRead]
-                
-            flows[self.stackSize+1] = [self.stackREG, self.deref], [self.stackREG]
+
+            flows[self.stackSize + 1] = [self.stackREG, self.deref], [self.stackREG]
             reg_reset.add(self.stackREG)
 
             return reg_reset, flows
-        
-        elif inst.mnemonic == "xor" \
-            and inst.operands[0].type == inst.operands[1].type == self.opTypeREG \
-            and inst.operands[0].reg == inst.operands[1].reg:
+
+        elif (
+            inst.mnemonic == "xor"
+            and inst.operands[0].type == inst.operands[1].type == self.opTypeREG
+            and inst.operands[0].reg == inst.operands[1].reg
+        ):
             if self.corruptedStack([inst.operands[0].reg]):
                 reg_resetStack, flowStack = self.killStack()
                 reg_resetStack.update([inst.operands[0].reg, self.flagREG])
                 return reg_resetStack, flowStack
             else:
-                return set([inst.operands[0].reg, self.flagREG]),[]
+                return set([inst.operands[0].reg, self.flagREG]), []
 
         elif inst.mnemonic == "xchg":
             regReset = set()
@@ -493,63 +518,70 @@ class Arch_x86_64(Arch):
             opW0, opR0, deref0 = self.getOperandIndices(inst.operands[0])
             opW1, opR1, deref1 = self.getOperandIndices(inst.operands[1])
 
-            flows = [(opW0, opR1+deref1), (opW1, opR0+deref0), ([self.deref], deref0+deref1)]
+            flows = [
+                (opW0, opR1 + deref1),
+                (opW1, opR0 + deref0),
+                ([self.deref], deref0 + deref1),
+            ]
 
-            if self.corruptedStack(opW0+opW1):
-                reg_resetStack, flowStack = self.killStack()            
+            if self.corruptedStack(opW0 + opW1):
+                reg_resetStack, flowStack = self.killStack()
                 regReset.update(reg_resetStack)
                 flows = flows + flowStack
             return regReset, flows
-            
+
         elif capstone.CS_GRP_RET in inst.groups:
             displ = self.addrSize
             if len(inst.operands) == 1 and inst.operands[0].type == self.opTypeIMM:
                 displ += inst.operands[0].imm
             return self.shiftStack(displ)
 
-            
-            
-        elif (inst.mnemonic == "add" or inst.mnemonic == "sub") \
-            and inst.operands[0].type == self.opTypeREG \
-            and (inst.operands[0].reg == X86_REG_RSP or inst.operands[0].reg == X86_REG_ESP) \
-            and inst.operands[1].type == self.opTypeIMM \
-            and abs(inst.operands[1].imm) < STACK_MAX_DIFF:
+        elif (
+            (inst.mnemonic == "add" or inst.mnemonic == "sub")
+            and inst.operands[0].type == self.opTypeREG
+            and (
+                inst.operands[0].reg == X86_REG_RSP
+                or inst.operands[0].reg == X86_REG_ESP
+            )
+            and inst.operands[1].type == self.opTypeIMM
+            and abs(inst.operands[1].imm) < STACK_MAX_DIFF
+        ):
             displ = inst.operands[1].imm
             if inst.mnemonic == "sub":
                 displ = -displ
-                
+
             reg_reset, flows = self.shiftStack(displ)
-            
+
             reg_reset.add(self.flagREG)
-            flows.append(([self.flagREG],[self.stackREG]))
+            flows.append(([self.flagREG], [self.stackREG]))
 
             return reg_reset, flows
-            
+
         else:
             return Arch.getInstFlows(self, inst)
 
-class Arch_x86_32(Arch_x86_64):
 
+class Arch_x86_32(Arch_x86_64):
     def __init__(self):
 
         Arch_x86_64.__init__(self)
 
-        # RAX    
+        # RAX
         self.matrix[X86_REG_RAX, X86_REG_EAX] = False
         self.matrix[X86_REG_RAX, X86_REG_AX] = False
         self.matrix[X86_REG_RAX, X86_REG_AH] = False
         self.matrix[X86_REG_RAX, X86_REG_AL] = False
-        # RBX    
+        # RBX
         self.matrix[X86_REG_RBX, X86_REG_EBX] = False
         self.matrix[X86_REG_RBX, X86_REG_BX] = False
         self.matrix[X86_REG_RBX, X86_REG_BH] = False
         self.matrix[X86_REG_RBX, X86_REG_BL] = False
-        # RCX    
+        # RCX
         self.matrix[X86_REG_RCX, X86_REG_ECX] = False
         self.matrix[X86_REG_RCX, X86_REG_CX] = False
         self.matrix[X86_REG_RCX, X86_REG_CH] = False
         self.matrix[X86_REG_RCX, X86_REG_CL] = False
-        # RDX    
+        # RDX
         self.matrix[X86_REG_RDX, X86_REG_EDX] = False
         self.matrix[X86_REG_RDX, X86_REG_DX] = False
         self.matrix[X86_REG_RDX, X86_REG_DH] = False
@@ -574,9 +606,5 @@ class Arch_x86_32(Arch_x86_64):
         self.addrSize = 4
         self.stackREG = X86_REG_ESP
 
-SUPPORTED_ARCH = {
 
-    'x64':Arch_x86_64,
-    'x86':Arch_x86_32,
-
-}
+SUPPORTED_ARCH = {"x64": Arch_x86_64, "x86": Arch_x86_32}

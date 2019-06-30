@@ -284,13 +284,16 @@ class GadgetMatrix(InstMatrix):
         _str = "\n++++ DepMatrix ++++\n"
         _str += self.printRegistersIo()
         _str += "\n++++ chainCond ++++\n"
+        chainCond = []
         for src in self.chainCond.nonzero()[1]:
             parents, _ = self.arch.getRegDependencies(src)
             bparents = False
             for parent in parents:
                 bparents = bparents or self.chainCond[0, parent]
             if not bparents:
-                _str += "%s" % (self.printIndexName(src, "_init"))
+                chainCond.append(self.printIndexName(src))
+
+        _str += ", ".join(chainCond) + "\n"
 
         return _str
                 

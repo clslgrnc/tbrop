@@ -6,8 +6,13 @@ python:
 install:
   - pip install -r requirements.txt
 
+addons:
+  sonarcloud:
+    organization: "clslgrnc-github"
+
 # command to run tests
 script:
   - python -m unittest tests/test_*.py
+  - sonar-scanner
 
-cache: pip
+cache: pip  

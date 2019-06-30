@@ -16,5 +16,9 @@ script:
   - coverage run --source tbrop -m unittest tests/test_*.py
   - coverage xml
   - sonar-scanner
+  # Install deepsource CLI
+  - curl https://deepsource.io/cli | sh
+  # Report coverage artifact to 'test-coverage' analyzer
+  - ./bin/deepsource report --analyzer test-coverage --key python --value-file ./coverage.xml
 
-cache: pip  
+cache: pip

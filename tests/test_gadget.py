@@ -14,7 +14,6 @@ class TestGadget(unittest.TestCase):
         md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_64)
         md.detail = True
         archx64 = arch.Arch_x86_64()
-        self.maxDiff = None
         for test_case in TestGadget.test_cases:
             if "x64" not in test_case:
                 continue

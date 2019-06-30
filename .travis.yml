@@ -5,6 +5,7 @@ python:
 # command to install dependencies
 install:
   - pip install -r requirements.txt
+  - pip install coverage
 
 addons:
   sonarcloud:
@@ -12,7 +13,8 @@ addons:
 
 # command to run tests
 script:
-  - python -m unittest tests/test_*.py
+  - coverage run --source tbrop -m unittest tests/test_*.py
+  - coverage xml
   - sonar-scanner
 
 cache: pip  

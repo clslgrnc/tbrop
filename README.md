@@ -103,3 +103,6 @@ ret
 ```
 
 Another use case is if you find yourself working with an exotic architecture and do not want to encode the whole precise semantic of instructions, you can try to retrieve the taint propagation rules of instructions (with [TaintInduce](https://github.com/melynx/taintinduce) or another approach) and implement the corresponding architecture for TBrop (good luck with that).
+
+--- 
+Originally developped by [@iNod3](https://github.com/iNod3) and [@clslgrnc]() at [@DGA-MI-SSI](https://github.com/DGA-MI-SSI/T-Brop).

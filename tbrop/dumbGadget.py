@@ -9,10 +9,11 @@ class dumbGadget:
     def __init__(self, target_arch, data, offset=0, gentryPoints=None):
         self.data = data
 
-        if target_arch not in SUPPORTED_ARCH:
+        arch_class = SUPPORTED_ARCH.get(target_arch)
+        if arch_class is None:
             raise Exception("ArchitectureNotSupported")
-        else:
-            self.arch = SUPPORTED_ARCH[target_arch]()
+
+        self.arch = arch_class()
 
         if self.arch.addrSize == 8:
             self.md = Cs(CS_ARCH_X86, CS_MODE_64)
@@ -79,11 +80,7 @@ class dumbGadget:
                     continue
 
             i = list(self.md.disasm(self.data[index:], self.offset + index, 1))
-            if not len(i):
-                continue
-
-            bIsFinal = self.isFinal(i[0])
-            if bIsFinal:
+            if i and self.isFinal(i[0]):
                 self.gentryPoints.append(index)
 
     def getPredecessors(self, address, max_ins_size=X86_MAX_INST_LEN):

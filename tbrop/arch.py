@@ -61,17 +61,18 @@ class Arch:
         self.regDepDict = {}
 
     def getRegDependencies(self, id_):
-        if id_ in self.regDepDict:
-            return self.regDepDict[id_]
-        else:
-            _, childrens = self.matrix.getrow(id_).nonzero()
-            parents, _ = self.matrix.getcol(id_).nonzero()
-            parents = list(parents)
-            childrens = list(childrens)
-            parents.remove(id_)
-            childrens.remove(id_)
-            self.regDepDict[id_] = parents, childrens
-            return parents, childrens
+        result = self.regDepDict.get(id_)
+        if result is not None:
+            return result
+
+        _, childrens = self.matrix.getrow(id_).nonzero()
+        parents, _ = self.matrix.getcol(id_).nonzero()
+        parents = list(parents)
+        childrens = list(childrens)
+        parents.remove(id_)
+        childrens.remove(id_)
+        self.regDepDict[id_] = parents, childrens
+        return parents, childrens
 
     # return index of stack cell at offset (in number of cells)
     def indexStackRead(self, offsetCell):
@@ -120,7 +121,9 @@ class Arch:
 
         return reg_reset, flows
 
-    def killStack(self, killer=[]):
+    def killStack(self, killer=None):
+        if killer is None:
+            killer = []
         reg_reset = set(range(self.stackFirst, self.stackLast + 1))
         reg_reset.update(
             [self.stackOverRead, self.stackOverWrite, self.stackRead, self.stackWrite]

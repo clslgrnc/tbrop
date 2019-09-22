@@ -47,7 +47,7 @@ class InstMatrix(object):
     def addDependencies(self):
         for (dstFlow, srcFlow) in self.flows:
             for src in srcFlow:
-                srcParents, srcChilds = self.arch.getRegDependencies(src)
+                _, srcChilds = self.arch.getRegDependencies(src)
                 srcList = [src] + srcChilds
                 for dst in dstFlow:
                     dstParents, dstChilds = self.arch.getRegDependencies(dst)
@@ -99,8 +99,8 @@ class InstMatrix(object):
 
     def lookupDependenceIndexByName(self, name):
 
-        if lookupRegisterIndexByName(name):
-            return lookupRegisterIndexByName(name)
+        if self.lookupRegisterIndexByName(name):
+            return self.lookupRegisterIndexByName(name)
         elif name == "deref":
             return self.arch.deref
         elif name == "mem_r":
@@ -153,7 +153,7 @@ class InstMatrix(object):
         for i in range(self.arch.size):
             if depStrings[i] == None:
                 parents, _ = self.arch.getRegDependencies(i)
-                if not self.matrix[i, i] and len(parents) == 0 and verbose:
+                if not self.matrix[i, i] and not parents and verbose:
                     _str += "%s <-/- %s\n" % (
                         self.printIndexName(i),
                         self.printIndexName(i),
@@ -243,9 +243,9 @@ class GadgetMatrix(InstMatrix):
             capstone.CS_GRP_JUMP in chainInst.groups
             or capstone.CS_GRP_CALL in chainInst.groups
         ):
-            opw, opr, deref = self.arch.getOperandIndices(chainInst.operands[0])
+            _, opr, deref = self.arch.getOperandIndices(chainInst.operands[0])
             for src in opr + deref:
-                srcParents, srcChilds = self.arch.getRegDependencies(src)
+                _, srcChilds = self.arch.getRegDependencies(src)
                 self.chainCond[0, src] = True
                 for child in srcChilds:
                     self.chainCond[0, child] = True
@@ -308,7 +308,7 @@ class GadgetMatrix(InstMatrix):
     def toStrings(self):
         strDiagFalse, strNDiagTrue = InstMatrix.toStrings(self)
         accChCo = ";"
-        for i, j in zip(*self.chainCond.nonzero()):
+        for j in self.chainCond.nonzero()[1]:
             accChCo += str(j) + ";"
         return strDiagFalse, strNDiagTrue, accChCo
 
@@ -317,7 +317,7 @@ class GadgetMatrix(InstMatrix):
 
             DiagFalse, NDiagTrue = InstMatrix.toSets(self)
             accChCo = set()
-            for i, j in zip(*self.chainCond.nonzero()):
+            for j in self.chainCond.nonzero()[1]:
                 accChCo.add(j)
             return DiagFalse, NDiagTrue, accChCo
 
@@ -330,10 +330,10 @@ class GadgetMatrix(InstMatrix):
 
 
 class Gadget(GadgetMatrix):
-    def __init__(self, arch, instList=[], max_cost=64):
+    def __init__(self, arch, instList=None, max_cost=64):
 
-        self.instList = instList
-        self.firstInst = None if instList == [] else instList[0]
+        self.instList = instList or []
+        self.firstInst = instList[0] if instList else None
 
         self.arch = arch
         self.max_cost = max_cost

@@ -1,11 +1,14 @@
+# Replacement for dumbGadget.py
+
 from capstone import *
-from tbrop.gadget import *
+
 from tbrop.arch import SUPPORTED_ARCH
+from tbrop.gadget import *
 
 X86_MAX_INST_LEN = 16
 
 
-class dumbGadget:
+class GadgetsCollection:
     def __init__(self, target_arch, data, offset=0, gentryPoints=None):
         self.data = data
 
@@ -32,12 +35,14 @@ class dumbGadget:
 
         if self.gentryPoints == None:
             self.InitEntryPoints()
-        self.gdgtCollection = []
+
+        self.gadgets = []
+        self.by_address = {}
+        self.by_bytes = {}
 
         self.instCache = {}
 
     def isFinal(self, inst):
-
         groups = inst.groups
 
         #        if CS_GRP_INVALID in groups:
@@ -73,7 +78,6 @@ class dumbGadget:
             subrange = range(len_data)
         self.gentryPoints = []
         for index in subrange:
-
             # skip 0x0FFF
             if index < len(self.data) - 1:
                 if self.data[index : index + 2] == b"\x0f\xff":
@@ -84,7 +88,6 @@ class dumbGadget:
                 self.gentryPoints.append(index)
 
     def getPredecessors(self, address, max_ins_size=X86_MAX_INST_LEN):
-
         Preds = []
         for cur_ins_size in range(1, max_ins_size + 1):
             if (
@@ -109,7 +112,6 @@ class dumbGadget:
         return Preds
 
     def getPredecessorsOpt(self, address, max_ins_size=X86_MAX_INST_LEN):
-
         Preds = []
         for cur_ins_size in range(1, max_ins_size + 1):
             if not address - cur_ins_size in self.instCache.keys():
@@ -140,7 +142,6 @@ class dumbGadget:
         return Preds
 
     def getPredecessorsOpt2(self, address, max_ins_size=X86_MAX_INST_LEN):
-
         Preds = []
         for cur_ins_size in range(1, max_ins_size + 1):
             if not address - cur_ins_size in self.instCache.keys():
@@ -180,12 +181,11 @@ class dumbGadget:
             return False
         else:
             gdgtcpy = gadget.copy()
-            self.gdgtCollection.append(gdgtcpy)
+            self.gadgets.append(gdgtcpy)
             return True
 
     # @profile
-    def dumbGadgets(self, callback=defaultCallback, context=None, max_cost=64):
-
+    def collect(self, callback=defaultCallback, context=None, max_cost=64):
         worklist = [
             Gadget(
                 self.arch,
@@ -196,10 +196,12 @@ class dumbGadget:
         ]
         while worklist != []:
             gadget = worklist.pop()
-            if gadget.canBeExtended():
-                firstInst = gadget.firstInst
+            if not gadget.canBeExtended():
+                continue
+
+            for first_addr in [gadget.firstInst.address]:
                 #                pred = self.getPredecessors(firstInst.address-self.offset)
-                pred = self.getPredecessorsOpt2(firstInst.address - self.offset)
+                pred = self.getPredecessorsOpt2(first_addr - self.offset)
 
                 if not pred:
                     continue

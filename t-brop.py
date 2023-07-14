@@ -64,10 +64,10 @@ REG64_strings = [
 def limit(gdgtCol, gadget, bound, context):
     if bound < context:
         gdgtcpy = gadget.copy()
-        gdgtCol.gadgets.append(gdgtcpy)
+        gdgtCol.add_gadget(gdgtcpy)
         return True
     elif bound == context:
-        gdgtCol.gadgets.append(gadget)
+        gdgtCol.add_gadget(gadget)
         return False
     else:
         return False

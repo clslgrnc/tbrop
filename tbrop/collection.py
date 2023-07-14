@@ -175,13 +175,23 @@ class GadgetsCollection:
                         Preds.append(inst)
         return Preds
 
+    def add_gadget(self, gadget):
+        gadget_bytes = gadget.bytes()
+        duplicate = self.by_bytes.get(gadget_bytes)
+
+        if duplicate is not None:
+            duplicate.addresses_of_duplicates.extend(gadget.addresses_of_duplicates)
+        else:
+            self.by_bytes[gadget_bytes] = gadget
+            self.gadgets.append(gadget)
+
     def defaultCallback(self, gadget, context):
         #        print(str(gadget.max_cost))
         if gadget.cost() > gadget.max_cost:
             return False
         else:
             gdgtcpy = gadget.copy()
-            self.gadgets.append(gdgtcpy)
+            self.add_gadget(gdgtcpy)
             return True
 
     # @profile

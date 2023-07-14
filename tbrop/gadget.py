@@ -1,9 +1,8 @@
-import capstone
+from time import time
 
+import capstone
 import numpy as np
 from scipy import sparse
-
-from time import time
 
 instMatrixDict = {}
 
@@ -334,6 +333,7 @@ class Gadget(GadgetMatrix):
 
         self.instList = instList or []
         self.firstInst = instList[0] if instList else None
+        self.addresses_of_duplicates = [inst.address for inst in self.instList[:1]]
 
         self.arch = arch
         self.max_cost = max_cost
@@ -475,4 +475,5 @@ class Gadget(GadgetMatrix):
     def extend(self, inst):
         self.instList.insert(0, inst)
         self.firstInst = inst
+        self.addresses_of_duplicates = [inst.address]
         self.gadgetMatrix.addInst(inst)

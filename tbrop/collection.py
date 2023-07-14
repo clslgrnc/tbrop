@@ -199,7 +199,7 @@ class GadgetsCollection:
             if not gadget.canBeExtended():
                 continue
 
-            for first_addr in [gadget.firstInst.address]:
+            for first_addr in gadget.addresses_of_duplicates:
                 #                pred = self.getPredecessors(firstInst.address-self.offset)
                 pred = self.getPredecessorsOpt2(first_addr - self.offset)
 

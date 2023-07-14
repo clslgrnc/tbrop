@@ -180,7 +180,7 @@ class GadgetsCollection:
         duplicate = self.by_bytes.get(gadget_bytes)
 
         if duplicate is not None:
-            duplicate.addresses_of_duplicates.extend(gadget.addresses_of_duplicates)
+            duplicate.addresses_of_duplicates |= gadget.addresses_of_duplicates
         else:
             self.by_bytes[gadget_bytes] = gadget
             self.gadgets.append(gadget)
@@ -196,38 +196,49 @@ class GadgetsCollection:
 
     # @profile
     def collect(self, callback=defaultCallback, context=None, max_cost=64):
-        worklist = [
-            Gadget(
+        worklist = {}
+
+        # Init worklist
+        for address in self.gentryPoints:
+            gadget = Gadget(
                 self.arch,
                 [next(self.md.disasm(self.data[address:], address + self.offset, 1))],
                 max_cost=max_cost,
             )
-            for address in self.gentryPoints
-        ]
-        while worklist != []:
-            gadget = worklist.pop()
-            if not gadget.canBeExtended():
+            gadget_bytes = gadget.bytes()
+            duplicate = worklist.get(gadget_bytes)
+
+            if duplicate is not None:
+                duplicate.addresses_of_duplicates |= gadget.addresses_of_duplicates
+            else:
+                worklist[gadget_bytes] = gadget
+
+        while worklist != {}:
+            gadget_bytes, gadget = worklist.popitem()
+
+            if not callback(self, gadget, context):
+                # We do not want to extend this gadget
                 continue
 
+            if not gadget.canBeExtended():
+                # We can not to extend this gadget
+                continue
+
+            predecessors = []
             for first_addr in gadget.addresses_of_duplicates:
                 #                pred = self.getPredecessors(firstInst.address-self.offset)
-                pred = self.getPredecessorsOpt2(first_addr - self.offset)
+                predecessors.extend(self.getPredecessorsOpt2(first_addr - self.offset))
 
-                if not pred:
-                    continue
+            for inst in predecessors:
+                new_gadget_bytes = bytes(inst.bytes) + gadget_bytes
+                new_gadget = worklist.get(new_gadget_bytes)
 
-                for inst in pred[:-1]:
+                if new_gadget is not None:
+                    new_gadget.addresses_of_duplicates.add(inst.address)
+                else:
                     new_gadget = gadget.copy()
                     new_gadget.extend(inst)
 
-                    if callback(self, new_gadget, context) == True:
-                        worklist.append(new_gadget)
-
-                inst = pred[-1]
-
-                gadget.extend(inst)
-
-                if callback(self, gadget, context) == True:
-                    worklist.append(gadget)
+                    worklist[new_gadget_bytes] = new_gadget
 
         return

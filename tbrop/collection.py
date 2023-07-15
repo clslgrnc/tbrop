@@ -4,6 +4,7 @@ from capstone import *
 
 from tbrop.arch import SUPPORTED_ARCH
 from tbrop.gadget import *
+from tbrop.graph import build_graph_from_bytes, clean_up_graph
 
 X86_MAX_INST_LEN = 16
 
@@ -33,6 +34,8 @@ class GadgetsCollection:
         self.disasm_cache = {}
         self.offset = offset
 
+        self.init_graph()
+
         if self.gentryPoints == None:
             self.InitEntryPoints()
 
@@ -42,138 +45,27 @@ class GadgetsCollection:
 
         self.instCache = {}
 
-    def isFinal(self, inst):
-        groups = inst.groups
+    def init_graph(self):
+        self.graph = build_graph_from_bytes(self.data)
+        clean_up_graph(self.graph)
 
-        #        if CS_GRP_INVALID in groups:
-        #            return False
-        if CS_GRP_RET in groups:
-            if inst.mnemonic.startswith("retf"):
-                return False
-            return True
-        elif CS_GRP_JUMP in groups or CS_GRP_CALL in groups:
-            if len(inst.operands) != 1:
-                print("weird capstone bug at ", hex(inst.address))
-                #                print(self.data[inst.address-self.offset:inst.address-self.offset+16].hex())
-                print(inst.bytes.hex().rjust(16), "\t", inst.mnemonic, inst.op_str)
-                #                print(str(groups))
-                print(str(inst.groups))
-                #                print(str(CS_GRP_JUMP), str(CS_GRP_CALL))
-                return False
-            _type = inst.operands[0].type
-            if _type == CS_OP_REG or _type == CS_OP_MEM:
-                # ignore jmp qword ptr [rip + ...]
-                if (
-                    _type == CS_OP_MEM
-                    and inst.operands[0].mem.base == capstone.x86_const.X86_REG_RIP
-                ):
-                    return False
-                return True
-        else:  # not a JMP/CALL/RET
-            return False
-
-    def InitEntryPoints(self, subrange=None):
-        if subrange == None:
-            len_data = len(self.data)
-            subrange = range(len_data)
+    def InitEntryPoints(self):
         self.gentryPoints = []
-        for index in subrange:
-            # skip 0x0FFF
-            if index < len(self.data) - 1:
-                if self.data[index : index + 2] == b"\x0f\xff":
-                    continue
-
-            i = list(self.md.disasm(self.data[index:], self.offset + index, 1))
-            if i and self.isFinal(i[0]):
-                self.gentryPoints.append(index)
+        for node in self.graph:
+            if next(self.graph.successors(node), None) is None:
+                # no successors
+                self.gentryPoints.append(node)
 
     def getPredecessors(self, address, max_ins_size=X86_MAX_INST_LEN):
-        Preds = []
-        for cur_ins_size in range(1, max_ins_size + 1):
-            if (
-                self.data[address - cur_ins_size : address - cur_ins_size + 2]
-                == b"\x0f\xff"
-            ):
-                continue
-            # 0 or 1 instruction
-            instOpt = self.md.disasm(
-                self.data[address - cur_ins_size :],
-                self.offset + address - cur_ins_size,
+        predecessors = []
+        for predecessor_address in self.graph.predecessors(address):
+            for pred in self.md.disasm(
+                self.data[predecessor_address:],
+                predecessor_address,
                 1,
-            )
-            for inst in instOpt:
-                # should be CS_GRP_PRIVILEGE, but bug in capstone next, X86_GRP_BRANCH_RELATIVE
-                if inst.size == cur_ins_size and not (
-                    set(inst.groups).intersection(
-                        range(1 + capstone.x86_const.X86_GRP_BRANCH_RELATIVE)
-                    )
-                ):
-                    Preds.append(inst)
-        return Preds
-
-    def getPredecessorsOpt(self, address, max_ins_size=X86_MAX_INST_LEN):
-        Preds = []
-        for cur_ins_size in range(1, max_ins_size + 1):
-            if not address - cur_ins_size in self.instCache.keys():
-                self.instCache[address - cur_ins_size] = None
-                if (
-                    self.data[address - cur_ins_size : address - cur_ins_size + 2]
-                    == b"\x0f\xff"
-                ):
-                    continue
-                # 0 or 1 instruction
-                instOpt = self.md.disasm(
-                    self.data[address - cur_ins_size :],
-                    self.offset + address - cur_ins_size,
-                    1,
-                )
-                for inst in instOpt:
-                    # should be CS_GRP_PRIVILEGE, but bug in capstone next, X86_GRP_BRANCH_RELATIVE
-                    if not (
-                        set(inst.groups).intersection(
-                            range(1 + capstone.x86_const.X86_GRP_BRANCH_RELATIVE)
-                        )
-                    ):
-                        self.instCache[address - cur_ins_size] = inst
-            if self.instCache[address - cur_ins_size] != None:
-                inst = self.instCache[address - cur_ins_size]
-                if inst.size == cur_ins_size:
-                    Preds.append(inst)
-        return Preds
-
-    def getPredecessorsOpt2(self, address, max_ins_size=X86_MAX_INST_LEN):
-        Preds = []
-        for cur_ins_size in range(1, max_ins_size + 1):
-            if not address - cur_ins_size in self.instCache.keys():
-                self.instCache[address - cur_ins_size] = 0
-                if (
-                    self.data[address - cur_ins_size : address - cur_ins_size + 2]
-                    == b"\x0f\xff"
-                ):
-                    continue
-                # 0 or 1 instruction
-                instOpt = self.mdfast.disasm(
-                    self.data[address - cur_ins_size :],
-                    self.offset + address - cur_ins_size,
-                    1,
-                )
-                for inst in instOpt:
-                    self.instCache[address - cur_ins_size] = inst.size
-            if self.instCache[address - cur_ins_size] == cur_ins_size:
-                instOpt = self.md.disasm(
-                    self.data[address - cur_ins_size :],
-                    self.offset + address - cur_ins_size,
-                    1,
-                )
-                for inst in instOpt:
-                    # should be CS_GRP_PRIVILEGE, but bug in capstone next, X86_GRP_BRANCH_RELATIVE
-                    if set(inst.groups).intersection(
-                        range(1 + capstone.x86_const.X86_GRP_BRANCH_RELATIVE)
-                    ):
-                        self.instCache[address - cur_ins_size] = 0
-                    else:
-                        Preds.append(inst)
-        return Preds
+            ):
+                predecessors.append(pred)
+        return predecessors
 
     def add_gadget(self, gadget):
         gadget_bytes = gadget.bytes()
@@ -202,7 +94,7 @@ class GadgetsCollection:
         for address in self.gentryPoints:
             gadget = Gadget(
                 self.arch,
-                [next(self.md.disasm(self.data[address:], address + self.offset, 1))],
+                [next(self.md.disasm(self.data[address:], address, 1))],
                 max_cost=max_cost,
             )
             gadget_bytes = gadget.bytes()
@@ -227,7 +119,7 @@ class GadgetsCollection:
             predecessors = []
             for first_addr in gadget.addresses_of_duplicates:
                 #                pred = self.getPredecessors(firstInst.address-self.offset)
-                predecessors.extend(self.getPredecessorsOpt2(first_addr - self.offset))
+                predecessors.extend(self.getPredecessors(first_addr))
 
             for inst in predecessors:
                 new_gadget_bytes = bytes(inst.bytes) + gadget_bytes

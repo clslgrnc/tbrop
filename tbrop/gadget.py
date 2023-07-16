@@ -1,9 +1,8 @@
-import capstone
+from time import time
 
+import capstone
 import numpy as np
 from scipy import sparse
-
-from time import time
 
 instMatrixDict = {}
 
@@ -28,7 +27,7 @@ class InstMatrix(object):
             self.reg_reset = set()
             self.flows = []
         else:
-            self.matrix = sparse.identity(arch.size, dtype=np.bool).tolil()
+            self.matrix = sparse.identity(arch.size, dtype=bool).tolil()
             self.reg_reset, self.flows = self.arch.getInstFlows(inst)
             self.initDependencies()
 
@@ -219,9 +218,9 @@ class GadgetMatrix(InstMatrix):
 
         if self.inst == None:
             self.inst = chainInst
-        self.matrix = sparse.identity(self.arch.size, dtype=np.bool).tocsr()
+        self.matrix = sparse.identity(self.arch.size, dtype=bool).tocsr()
         # groups = chainInst.groups
-        self.chainCond = sparse.lil_matrix((1, self.arch.size), dtype=np.bool)
+        self.chainCond = sparse.lil_matrix((1, self.arch.size), dtype=bool)
         len_chainInst_operands = len(chainInst.operands)
         if capstone.CS_GRP_RET in chainInst.groups:
             if len_chainInst_operands == 0:
@@ -334,13 +333,14 @@ class Gadget(GadgetMatrix):
 
         self.instList = instList or []
         self.firstInst = instList[0] if instList else None
+        self.addresses_of_duplicates = {inst.address for inst in self.instList[:1]}
 
         self.arch = arch
         self.max_cost = max_cost
 
         self.gadgetMatrix = GadgetMatrix(arch)
 
-        #        self.gadgetMatrix.matrix = sparse.identity(arch.size, dtype=np.bool).tocsr()
+        #        self.gadgetMatrix.matrix = sparse.identity(arch.size, dtype=bool).tocsr()
 
         for i in range(len(self.instList) - 1, -1, -1):
             self.gadgetMatrix.addInst(self.instList[i])
@@ -475,4 +475,5 @@ class Gadget(GadgetMatrix):
     def extend(self, inst):
         self.instList.insert(0, inst)
         self.firstInst = inst
+        self.addresses_of_duplicates = {inst.address}
         self.gadgetMatrix.addInst(inst)

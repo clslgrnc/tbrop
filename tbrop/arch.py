@@ -268,7 +268,7 @@ class Arch_x86_64(Arch):
         size = (
             X86_REG_ENDING + MEM_RESERVED_INDICES
         )  # 1 reserved for mem dependencies 1 for bottom of stack, the rest for top of stack
-        dependencies = sparse.lil_matrix((size, size), dtype=np.bool)
+        dependencies = sparse.lil_matrix((size, size), dtype=bool)
 
         for i in range(size):
             dependencies[i, i] = True

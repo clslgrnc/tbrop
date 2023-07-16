@@ -1,4 +1,4 @@
-FROM python:3.6.8-slim-stretch
+FROM python:3.11.4-slim-bookworm
 
 WORKDIR /app/tbrop
 

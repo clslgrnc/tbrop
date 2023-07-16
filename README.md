@@ -68,13 +68,13 @@ sudo docker run --rm -it -v /FULL/LOCAL/PATH/FILE:/app/FILE:ro tbrop /app/FILE
 
 It should (eventually) bring you to an ipython shell where you can do stuff like:
 ```python
-for g in gdgtCollection.gdgtCollection:
+for g in gdgtCollection.gadgets:
   if g.gadgetMatrix.matrix[X86_REG_RSP,X86_REG_RAX] \
   and g.gadgetMatrix.chainCond[0,X86_REG_RCX]:
     print(hex(g.getAddress()),g)
 ```
 
-All the gadgets are in the `gdgtCollection` attribute of the `gdgtCollection` object (some refactoring is needed...). Each gadget as a `gadgetMatrix` attribute that can be queried in the following way:
+All the gadgets are in the `gadgets` attribute of the `gdgtCollection` object (some refactoring is needed...). Each gadget as a `gadgetMatrix` attribute that can be queried in the following way:
 - `g.gadgetMatrix.matrix[X86_REG_RSP,X86_REG_RAX]` is `True` if and only if there is a dependency from `X86_REG_RAX` before the execution of the gadget to `X86_REG_RSP` after its execution
 - `g.gadgetMatrix.chainCond[0,X86_REG_RCX]` is `True` if and only if there is a dependency from `X86_REG_RCX` before the execution of the gadget to `rip` after its execution. In other word: if you control `rcx` before the execution of the gadget, you might be able to control its destination and chain it with other gadgets or code.
 
